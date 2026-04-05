@@ -15,6 +15,7 @@ from god_system_modules.ui_handlers import (
     run_single_query_mode_gui, 
     run_market_health_check_gui
 )
+import yfinance as yf
 
 console = Console()
 
@@ -27,6 +28,24 @@ def main():
 
     if args.auto:
         rprint(f"[bold green]🤖 正在以自動化模式執行定時掃描... ({datetime.datetime.now()})[/bold green]")
+        
+        # 🔗 [新增] 檢查今日是否為開市日 (檢查加權指數是否有今日資料)
+        try:
+            rprint("[dim]正在檢查市場開市狀態...[/dim]")
+            market = yf.download("^TWII", period="1d", progress=False, auto_adjust=True)
+            if not market.empty:
+                last_trade_date = market.index[-1].date()
+                today = datetime.datetime.now().date()
+                if last_trade_date < today:
+                    rprint(f"[bold yellow]⚠️ 今日 ({today}) 非開市日或尚未有數據，跳過自動掃描。[/bold yellow]")
+                    return
+            else:
+                rprint("[bold red]❌ 無法獲取市場數據，跳過掃描。[/bold red]")
+                return
+        except Exception as e:
+            rprint(f"[bold red]❌ 檢查開市狀態時發生錯誤: {e}[/bold red]")
+            return
+
         run_full_scan_gui(scanner, is_auto=True)
         rprint("[bold blue]✅ 自動化掃描任務已結束。[/bold blue]")
         return
