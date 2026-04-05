@@ -1,0 +1,24 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.venv
+env/
+venv/
+
+# Watchlists & Data (根據使用者要求：只需程式檔，因此排除 JSON 與紀錄)
+*.json
+*.xlsx
+*.csv
+*.log
+
+# Models
+*.joblib
+*.h5
+
+# OS
+.DS_Store
+Thumbs.db
