@@ -15,12 +15,22 @@ class MarketContext:
     """用於儲存總體經濟與市場體質狀態"""
     def __init__(self):
         self.is_bull_market = False
-        self.ma_status = ""
+        self.ma_status = "未知"
         self.usd_trend = "中立"
         self.gold_trend = "中立"
         self.oil_trend = "中立"
         self.macro_score = 0
         self.last_updated = ""
+
+    @property
+    def current_regime(self):
+        """對齊介面呼叫，返回大盤均線體質"""
+        return self.ma_status
+
+    @property
+    def description(self):
+        """生成總經趨勢簡要描述"""
+        return f"美元{self.usd_trend} / 黃金{self.gold_trend} / 原油{self.oil_trend} (評分: {self.macro_score})"
 
     def __repr__(self):
         return f"<MarketContext(Bull={self.is_bull_market}, Score={self.macro_score})>"
