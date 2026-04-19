@@ -96,9 +96,29 @@ def run_full_scan_gui(scanner, is_auto=False):
             "reason": f"{dynamic_reason} | 建議價: {hint['suggested_buy_trigger']}"
         })
 
-    # 6. 發送專業 Flex Message
-    flex_json = generate_stock_report_flex(market_context, top_sectors, etf_recs, stock_picks)
-    send_flex_message(f"台股策略掃描日報 ({now_str})", flex_json)
+    # 6. 組裝專業文字報表 (支援轉傳)
+    line_message_lines = [
+        f"📊 台股量化日報 ({now_str})",
+        "────────────────",
+        "🌍 【市場宏觀體質】",
+        f"● 體質診斷: {market_context.current_regime}",
+        f"● 美元/金油: {market_context.description[:20]}...",
+        "",
+        "📈 【強勢類股排行】"
+    ]
+    
+    for i, sector in enumerate(top_sectors[:3], 1):
+        line_message_lines.append(f"{i}. {sector['Industry']} (動能: {sector['Net%']}%)")
+        
+    line_message_lines.append("")
+    line_message_lines.append("🚀 【潛力標的與動態題材】")
+    for pick in stock_picks:
+        line_message_lines.append(f"● {pick['name']} ({pick['ticker'].replace('.TW','')})")
+        line_message_lines.append(f"  └ {pick['reason']}")
+    
+    line_message_lines.append("\n💡 長按本訊息即可直接轉傳分享！")
+    
+    send_line_message("\n".join(line_message_lines))
     
     # 同步監控清單
     for stock, alert in alerts.items():
