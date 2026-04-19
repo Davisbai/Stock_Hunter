@@ -38,15 +38,16 @@ class SectorAnalyzer:
         self.ranking_df = pd.DataFrame()
 
     def fetch_sector_momentum(self, period="6mo"):
-        """計算各產業的 Net% (動能) 與 RS 排名"""
-        console.print("[dim]📊 正在分析類股輪動動能...[/dim]")
+        """計算各產業的 Net% (5日與20日動能) 與 RS 排名"""
+        console.print("[dim]📊 正在分析動態類股輪動與起漲跡象...[/dim]")
         
         # 獲取基準位 (大盤)
         b_data = yf.download(self.benchmark, period=period, progress=False, auto_adjust=True)
         if b_data.empty: return pd.DataFrame()
         if isinstance(b_data.columns, pd.MultiIndex): b_data.columns = b_data.columns.get_level_values(0)
         
-        b_ret = b_data['Close'].pct_change().rolling(20).sum() # 20日累積報酬
+        b_ret_20 = b_data['Close'].pct_change().rolling(20).sum()
+        b_ret_5 = b_data['Close'].pct_change().rolling(5).sum()
 
         results = []
         for name, sym in TAIWAN_SECTORS.items():
@@ -55,24 +56,35 @@ class SectorAnalyzer:
                 if s_data.empty: continue
                 if isinstance(s_data.columns, pd.MultiIndex): s_data.columns = s_data.columns.get_level_values(0)
                 
-                # 計算 Net% (20日報酬)
+                # 計算動能
                 current_price = s_data['Close'].iloc[-1]
-                prev_price = s_data['Close'].iloc[-20] if len(s_data) >= 20 else s_data['Close'].iloc[0]
-                net_momentum = (current_price / prev_price - 1) * 100
+                
+                # 20日動能
+                p_20 = s_data['Close'].iloc[-20] if len(s_data) >= 20 else s_data['Close'].iloc[0]
+                net_20 = (current_price / p_20 - 1) * 100
+                
+                # 5日動能 (剛起步跡象)
+                p_5 = s_data['Close'].iloc[-5] if len(s_data) >= 5 else s_data['Close'].iloc[0]
+                net_5 = (current_price / p_5 - 1) * 100
                 
                 # 相對強弱 (RS) vs 大盤
-                s_ret = s_data['Close'].pct_change().rolling(20).sum()
-                rs_score = (s_ret.iloc[-1] - b_ret.iloc[-1]) * 100
+                s_ret_20 = s_data['Close'].pct_change().rolling(20).sum()
+                rs_score = (s_ret_20.iloc[-1] - b_ret_20.iloc[-1]) * 100
                 
-                # 簡單 Value% (目前價格 vs 120日均線的乖離，負值代表低估)
+                # 起漲係數 (短期動能增速)
+                acceleration = net_5 - (net_20 / 4) # 理想情況 5日應佔 20日的 1/4，若超出則代表正在加速
+                
+                # 簡單 Value% (均線乖離)
                 ma120 = s_data['Close'].rolling(120).mean().iloc[-1]
                 value_score = (current_price / ma120 - 1) * 100 if not pd.isna(ma120) else 0
                 
                 results.append({
                     "Industry": name,
                     "Symbol": sym,
-                    "Net%": round(net_momentum, 2),
+                    "Net%": round(net_20, 2),
+                    "Net5d%": round(net_5, 2),
                     "RS_Score": round(rs_score, 2),
+                    "Acceleration": round(acceleration, 2),
                     "Value%": round(value_score, 2),
                     "Last_Price": round(current_price, 2)
                 })
@@ -86,6 +98,18 @@ class SectorAnalyzer:
             self.ranking_df = df
         return df
 
-    def get_top_sectors(self, top_n=3):
+    def get_top_sectors(self, top_n=10):
         if self.ranking_df.empty: return []
         return self.ranking_df.head(top_n).to_dict('records')
+
+    def identify_rising_stars(self, top_n=3):
+        """識別起漲跡象：短期動能轉強且 RS 為正"""
+        if self.ranking_df.empty: return []
+        # 過濾條件：5日動能 > 0 且 正在加速 (Acceleration > 0) 且 RS_Score > -2 (容許微負)
+        stars = self.ranking_df[
+            (self.ranking_df['Net5d%'] > 0) & 
+            (self.ranking_df['Acceleration'] > 0.5) &
+            (self.ranking_df['RS_Score'] > -2)
+        ].copy()
+        stars = stars.sort_values(by="Acceleration", ascending=False)
+        return stars.head(top_n).to_dict('records')

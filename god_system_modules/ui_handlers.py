@@ -33,7 +33,8 @@ def run_full_scan_gui(scanner, is_auto=False):
     # 2. 類股動能分析
     sa = SectorAnalyzer()
     top_sectors_df = sa.fetch_sector_momentum()
-    top_sectors = sa.get_top_sectors(3)
+    top_sectors = sa.get_top_sectors(10)
+    rising_stars = sa.identify_rising_stars(3)
     
     # 3. ETF 映射建議
     em = ETFMapper()
@@ -107,9 +108,15 @@ def run_full_scan_gui(scanner, is_auto=False):
         "📈 【強勢類股排行】"
     ]
     
-    for i, sector in enumerate(top_sectors[:3], 1):
+    for i, sector in enumerate(top_sectors, 1):
         line_message_lines.append(f"{i}. {sector['Industry']} (動能: {sector['Net%']}%)")
         
+    if rising_stars:
+        line_message_lines.append("")
+        line_message_lines.append("🔍 【潛力起漲類股 (Rising Stars)】")
+        for star in rising_stars:
+            line_message_lines.append(f"● {star['Industry']}: 短期加速轉強，留意起漲跡象")
+            
     line_message_lines.append("")
     line_message_lines.append("🚀 【潛力標的與動態題材】")
     for pick in stock_picks:
