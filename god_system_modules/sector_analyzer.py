@@ -86,6 +86,6 @@ class SectorAnalyzer:
             self.ranking_df = df
         return df
 
-    def get_top_sectors((self, top_n=3):
+    def get_top_sectors(self, top_n=3):
         if self.ranking_df.empty: return []
         return self.ranking_df.head(top_n).to_dict('records')
