@@ -103,13 +103,24 @@ class SectorAnalyzer:
         return self.ranking_df.head(top_n).to_dict('records')
 
     def identify_rising_stars(self, top_n=3):
-        """識別起漲跡象：短期動能轉強且 RS 為正"""
+        """識別起漲跡象：區分【超跌反彈】與【強勢噴發】"""
         if self.ranking_df.empty: return []
-        # 過濾條件：5日動能 > 0 且 正在加速 (Acceleration > 0) 且 RS_Score > -2 (容許微負)
-        stars = self.ranking_df[
+        
+        # 共同條件：5日動能超越 20日的 1/4 (正在加速) 且 5日動能為正
+        stars_df = self.ranking_df[
             (self.ranking_df['Net5d%'] > 0) & 
-            (self.ranking_df['Acceleration'] > 0.5) &
-            (self.ranking_df['RS_Score'] > -2)
+            (self.ranking_df['Acceleration'] > 0.3)
         ].copy()
-        stars = stars.sort_values(by="Acceleration", ascending=False)
-        return stars.head(top_n).to_dict('records')
+        
+        results = []
+        for _, row in stars_df.iterrows():
+            tag = "強勢高檔噴發" if row['Value%'] > 0 else "超跌低檔反彈"
+            results.append({
+                "Industry": row['Industry'],
+                "Tag": tag,
+                "Acceleration": row['Acceleration']
+            })
+            
+        # 依照加速力道排序並取前 N 名
+        results = sorted(results, key=lambda x: x['Acceleration'], reverse=True)
+        return results[:top_n]
