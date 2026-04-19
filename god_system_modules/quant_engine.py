@@ -10,6 +10,20 @@ from rich.console import Console
 
 console = Console()
 
+class MarketContext:
+    """用於儲存總體經濟與市場體質狀態"""
+    def __init__(self):
+        self.is_bull_market = False
+        self.ma_status = ""
+        self.usd_trend = "中立"
+        self.gold_trend = "中立"
+        self.oil_trend = "中立"
+        self.macro_score = 0
+        self.last_updated = ""
+
+    def __repr__(self):
+        return f"<MarketContext(Bull={self.is_bull_market}, Score={self.macro_score})>"
+
 class AdvancedQuantEngine:
     def __init__(self, ticker="2330.TW", target_vol=0.15):
         self.ticker = ticker
@@ -32,6 +46,62 @@ class AdvancedQuantEngine:
         df['Momentum_20'] = df['Close'] / df['Close'].shift(20) - 1
         self.data = df.dropna().copy()
         return True
+
+    def fetch_macro_data(self):
+        """獲取總體經濟指標 (美元, 黃金, 原油)"""
+        console.print("[dim]🌍 正在獲取全球總體經濟指標...[/dim]")
+        macro_symbols = {
+            "USD": "DX-Y.NYB",
+            "Gold": "GC=F",
+            "Oil": "CL=F"
+        }
+        
+        context = MarketContext()
+        context.last_updated = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        
+        try:
+            for name, sym in macro_symbols.items():
+                m_data = yf.download(sym, period="3mo", progress=False, auto_adjust=True)
+                if m_data.empty: continue
+                if isinstance(m_data.columns, pd.MultiIndex): m_data.columns = m_data.columns.get_level_values(0)
+                
+                # 簡單趨勢判斷: 目前價格 vs 20日均線
+                current_price = m_data['Close'].iloc[-1]
+                ma20 = m_data['Close'].rolling(20).mean().iloc[-1]
+                trend = "強勢" if current_price > ma20 else "弱勢"
+                
+                if name == "USD": context.usd_trend = trend
+                elif name == "Gold": context.gold_trend = trend
+                elif name == "Oil": context.oil_trend = trend
+            
+            # 台股大盤體質檢測 (^TWII)
+            twii = yf.download("^TWII", period="1y", progress=False, auto_adjust=True)
+            if not twii.empty:
+                if isinstance(twii.columns, pd.MultiIndex): twii.columns = twii.columns.get_level_values(0)
+                close = twii['Close'].iloc[-1]
+                ma20 = twii['Close'].rolling(20).mean().iloc[-1]
+                ma60 = twii['Close'].rolling(60).mean().iloc[-1]
+                ma240 = twii['Close'].rolling(240).mean().iloc[-1]
+                
+                context.is_bull_market = bool(close > ma60)
+                if close > ma20 > ma60 > ma240:
+                    context.ma_status = "多頭排列 (強勢)"
+                    context.macro_score = 100
+                elif close > ma60:
+                    context.ma_status = "多頭回檔 / 區間"
+                    context.macro_score = 70
+                else:
+                    context.ma_status = "空頭趨勢 / 走弱"
+                    context.macro_score = 30
+                    
+                # 美元負相關懲罰: 美元強勢對台股不利
+                if context.usd_trend == "強勢":
+                    context.macro_score -= 15
+                    
+            return context
+        except Exception as e:
+            console.print(f"[bold red]❌ 獲取總經數據失敗: {e}[/bold red]")
+            return context
 
     def detect_market_regime(self):
         if len(self.data) < 100: return

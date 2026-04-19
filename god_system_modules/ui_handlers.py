@@ -9,34 +9,49 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from .config import STOCK_MAP, BACKTEST_START_DATE
-from .utils import load_watchlist, save_watchlist, send_line_message
+from .utils import load_watchlist, save_watchlist, send_line_message, send_flex_message
 from .trading_system import TaiwanStockTradingSystem
 from .quant_engine import AdvancedQuantEngine, ShioajiMockAPI
 from .breakout_analyzer import get_tomorrow_recommendations
+from .sector_analyzer import SectorAnalyzer
+from .etf_mapper import ETFMapper
+from .flex_templates import generate_stock_report_flex
+from .catalyst_engine import CatalystEngine
 
 console = Console()
 
 def run_full_scan_gui(scanner, is_auto=False):
     if not is_auto:
-        console.print("\n[bold green]🚀 啟動全自動策略掃描 (核心實作還原版)...[/bold green]")
+        console.print("\n[bold green]🚀 啟動全自動策略掃描 (專業升級版)...[/bold green]")
 
     now_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    if not is_auto: print(f"--- 系統啟動時間: {now_str} ---")
+    
+    # 1. 總體經濟與大盤體質診斷
+    engine = AdvancedQuantEngine()
+    market_context = engine.fetch_macro_data()
+    
+    # 2. 類股動能分析
+    sa = SectorAnalyzer()
+    top_sectors_df = sa.fetch_sector_momentum()
+    top_sectors = sa.get_top_sectors(3)
+    
+    # 3. ETF 映射建議
+    em = ETFMapper()
+    etf_recs = em.get_recommendation(top_sectors, market_context)
 
+    # 4. 個股掃描與分析
     watchlist = load_watchlist()
     watchlist_updated = False
-
     hot_stocks = scanner.scan()
+    
     DYNAMIC_MAP = {f"{item['code']}.TW": item['name'] for item in hot_stocks}
     WATCHLIST_MAP = {k: v.get("名稱", "") for k, v in watchlist.items()}
-    
     COMBINED_MAP = {**STOCK_MAP, **DYNAMIC_MAP, **WATCHLIST_MAP}
 
     system = TaiwanStockTradingSystem(
         tickers=list(COMBINED_MAP.keys()),
         start_date=BACKTEST_START_DATE
     )
-    
     system.fetch_market_data()
     
     all_dfs = {}
@@ -45,60 +60,61 @@ def run_full_scan_gui(scanner, is_auto=False):
         if df is not None:
             all_dfs[ticker] = df
             
-    summary, alerts, logs = {}, {}, {}
+    alerts = {}
     for ticker, df in all_dfs.items():
         last_day = df.iloc[-1]
         alerts[ticker] = {
             "日期": df.index[-1].strftime("%Y-%m-%d"),
             "收盤價": round(float(last_day['Close']), 2),
-            "月線價": round(float(last_day['MA20']), 2),
-            "大盤安全": bool(last_day['Market_OK']),
             "今日評分": int(last_day['Score']),
-            "個股原始評分": int(last_day['Raw_Score']),
             "是否觸發賣出": bool(last_day['Sell_Signal']),
-            "獨立行情": bool(last_day['Independent_Alpha']),
             "精準買點": bool(last_day.get('Pro_Bottom_Breakout', False)),
-            "縮量埋伏": bool(last_day.get('Ambush_Setup', False)),
-            "高檔背離": bool(last_day.get('Top_Divergence', False)),
-            "乖離過大": bool(last_day.get('Overextended_MA5', False))
+            "縮量埋伏": bool(last_day.get('Ambush_Setup', False))
         }
         
-    line_message_lines = [f"📊 Davis，今日台股策略掃描已完成\n時間: {now_str}\n"]
-
+    # 5. 整理個股推薦清單 (取前 3 名高分且具備突破訊號者)
     tomorrow_hints = get_tomorrow_recommendations(alerts, all_dfs)
-    if tomorrow_hints:
-        line_message_lines.append("⚡ 【明日潛力進場標的】")
-        for hint in tomorrow_hints:
-            s_name = COMBINED_MAP.get(hint['ticker'], "")
-            msg = f"🔥 {s_name} ({hint['ticker'].replace('.TW','')}): {hint['entry_strategy']}\n"
-            msg += f"   - 追價點: {hint['suggested_buy_trigger']} | 拉回點: {hint['suggested_buy_limit']}\n"
-            msg += f"   - 停損位: {hint['suggested_stop_loss']} | 目標位: {hint['suggested_target']}"
-            line_message_lines.append(msg)
-        line_message_lines.append("-" * 30 + "\n")
+    ce = CatalystEngine()
+    
+    stock_picks = []
+    for hint in tomorrow_hints[:3]:
+        ticker = hint['ticker']
+        s_name = COMBINED_MAP.get(ticker, "未知標的")
+        
+        # 🔎 動態偵測催化劑與主題
+        try:
+            # 獲取 Ticker 物件與 info 進行動態探測
+            t_obj = yf.Ticker(ticker)
+            info = t_obj.info
+            dynamic_reason = ce.discover_themes(ticker, s_name, info)
+        except:
+            dynamic_reason = "技術面強勢突破 | 量能放大"
+            
+        stock_picks.append({
+            "ticker": ticker,
+            "name": s_name,
+            "reason": f"{dynamic_reason} | 建議價: {hint['suggested_buy_trigger']}"
+        })
 
+    # 6. 發送專業 Flex Message
+    flex_json = generate_stock_report_flex(market_context, top_sectors, etf_recs, stock_picks)
+    send_flex_message(f"台股策略掃描日報 ({now_str})", flex_json)
+    
+    # 同步監控清單
     for stock, alert in alerts.items():
         stock_name = COMBINED_MAP.get(stock, "")
-        tag = "[熱門]" if stock in DYNAMIC_MAP else "[固定]"
         score = alert['今日評分']
-        
-        if not is_auto:
-            status = "🟢 買進" if score >= 65 else "⚪ 觀望"
-            if alert["是否觸發賣出"]: status = "🔴 賣出"
-            print(f"{tag} {stock:<7} {stock_name:<4} | 收盤: {alert['收盤價']:>6.1f} | 評分: {score:>3} | 建議: {status}")
-        
-        # 同步監控清單
         if alert["是否觸發賣出"] and stock in watchlist:
             del watchlist[stock]
             watchlist_updated = True
-        elif score >= 75 and stock not in watchlist:
+        elif score >= 80 and stock not in watchlist:
             watchlist[stock] = {"名稱": stock_name, "加入日期": alert['日期'], "加入價格": alert['收盤價']}
             watchlist_updated = True
 
     if watchlist_updated: save_watchlist(watchlist)
-    send_line_message("\n".join(line_message_lines))
     
     if not is_auto:
-        console.print("\n[bold cyan]✅ 掃描與同步完成[/bold cyan]")
+        console.print("\n[bold cyan]✅ 全自動分析與推播任務完成[/bold cyan]")
 
 def run_single_query_mode_gui():
     while True:
