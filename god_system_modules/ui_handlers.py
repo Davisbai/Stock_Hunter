@@ -13,7 +13,7 @@ from .utils import load_watchlist, save_watchlist, send_line_message, send_flex_
 from .trading_system import TaiwanStockTradingSystem
 from .quant_engine import AdvancedQuantEngine, ShioajiMockAPI
 from .breakout_analyzer import get_tomorrow_recommendations
-from .sector_analyzer import SectorAnalyzer
+from .sector_analyzer import SectorAnalyzer, SECTOR_LEADERS
 from .etf_mapper import ETFMapper
 from .flex_templates import generate_stock_report_flex
 from .catalyst_engine import CatalystEngine
@@ -109,7 +109,9 @@ def run_full_scan_gui(scanner, is_auto=False):
     ]
     
     for i, sector in enumerate(top_sectors, 1):
-        line_message_lines.append(f"{i}. {sector['Industry']} (動能: {sector['Net%']}%)")
+        ind_name = sector['Industry']
+        leaders = SECTOR_LEADERS.get(ind_name, "分析中")
+        line_message_lines.append(f"{i}. {ind_name} ({sector['Net%']}%) | 代表: {leaders}")
         
     if rising_stars:
         line_message_lines.append("")
