@@ -103,7 +103,7 @@ def run_full_scan_gui(scanner, is_auto=False):
         "────────────────",
         "🌍 【市場宏觀體質】",
         f"● 體質診斷: {market_context.current_regime}",
-        f"● 美元/金油: {market_context.description[:20]}...",
+        f"● 趨勢參考: {market_context.description}",
         "",
         "📈 【強勢類股排行】"
     ]
@@ -115,9 +115,11 @@ def run_full_scan_gui(scanner, is_auto=False):
         
     if rising_stars:
         line_message_lines.append("")
-        line_message_lines.append("🔍 【潛力起漲類股 (Rising Stars)】")
+        line_message_lines.append("🔍 【潛力起漲類股】")
         for star in rising_stars:
-            line_message_lines.append(f"● {star['Industry']}: {star['Tag']} 跡象")
+            ind_name = star['Industry']
+            leaders = SECTOR_LEADERS.get(ind_name, "分析中")
+            line_message_lines.append(f"● {ind_name}: {star['Tag']} 跡象 (代表: {leaders})")
             
     line_message_lines.append("")
     line_message_lines.append("🚀 【潛力標的與動態題材】")
