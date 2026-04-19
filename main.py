@@ -37,8 +37,7 @@ def main():
                 last_trade_date = market.index[-1].date()
                 today = datetime.datetime.now().date()
                 if last_trade_date < today:
-                    rprint(f"[bold yellow]⚠️ 今日 ({today}) 非開市日或尚未有數據，跳過自動掃描。[/bold yellow]")
-                    return
+                    rprint(f"[bold yellow]ℹ️ 今日 ({today}) 非開市日，系統將使用最後交易日 ({last_trade_date}) 的數據進行分析。[/bold yellow]")
             else:
                 rprint("[bold red]❌ 無法獲取市場數據，跳過掃描。[/bold red]")
                 return
