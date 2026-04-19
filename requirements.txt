@@ -8,3 +8,4 @@ requests
 twstock
 lxml
 beautifulsoup4
+line-bot-sdk
